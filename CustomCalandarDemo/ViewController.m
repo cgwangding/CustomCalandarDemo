@@ -7,7 +7,7 @@
 //
 
 #import "ViewController.h"
-#import "CustomCalendarView.h"
+
 
 @interface ViewController ()
 
@@ -18,8 +18,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     // Do any additional setup after loading the view, typically from a nib.
-    CustomCalendarView *calendarView = [[CustomCalendarView alloc]initWithFrame:CGRectMake(0, 20, CGRectGetWidth(self.view.frame), 300)];
-    [self.view addSubview:calendarView];
+
     
     
 }

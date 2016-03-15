@@ -8,6 +8,7 @@
 
 #import "CustomCalendarView.h"
 #import "DateItemButton.h"
+#import "UIView+Extension.h"
 
 #define RGBColor(r,g,b,a) [UIColor colorWithRed:(r)/255.0 green:(g)/255.0 blue:(b)/255.0 alpha:(a)]
 
@@ -31,14 +32,25 @@ static CGFloat headerHeight = 35;
 
 @property (assign, nonatomic) CustomCalendarViewType type;
 
+@property (copy, nonatomic) NSDateComponents *canChooseStartComponents;
+@property (copy, nonatomic) NSDateComponents *canChooseEdnComponents;
+
 @end
 
 @implementation CustomCalendarView
 
 - (instancetype)initWithFrame:(CGRect)frame type:(CustomCalendarViewType)type
 {
-    if ([self initWithFrame:frame]) {
+    if (self = [super initWithFrame:frame]) {
         self.type = type;
+        [self addSubview:self.headerView];
+        self.currentComponents = self.dateComponets;
+        [self buildWeekdayNames];
+        [self updateDateTitle:self.dateComponets];
+        //生成该月的时间item
+        [self makeAndCalculateMonthDaysViewWithDateComponents:self.dateComponets];
+        //重新布局
+        [self rebuildDateItemAndAdd];
     }
     return self;
 }
@@ -95,7 +107,7 @@ static CGFloat headerHeight = 35;
     NSDateComponents *firstDayComponents = [components copy];
     
     //计算当月有多少天
-    NSInteger daysOfMonth = [firstDayComponents.calendar rangeOfUnit:NSCalendarUnitDay inUnit:NSCalendarUnitMonth forDate:[NSDate date]].length;
+    NSInteger daysOfMonth = [firstDayComponents.calendar rangeOfUnit:NSCalendarUnitDay inUnit:NSCalendarUnitMonth forDate:firstDayComponents.date].length;
     
     firstDayComponents.day = 1;
     //1-周日 ，2-周一，3-周二，4-周三，5-周四，6-周五，7-周六
@@ -106,11 +118,9 @@ static CGFloat headerHeight = 35;
     
     NSInteger lastDayOfWeekday = [firstDayComponents.calendar ordinalityOfUnit:NSCalendarUnitDay inUnit:NSCalendarUnitWeekOfMonth forDate:firstDayComponents.date];
     
-    
-    
     //生成当月的时间item
     NSInteger preWeekday = firstDayOfWeekday;
-    for (int i = 1; i <= 31; i++) {
+    for (int i = 1; i <= daysOfMonth; i++) {
         NSInteger weekday = 1;
         //计算该天是周几
         if (i == 1) {
@@ -123,23 +133,53 @@ static CGFloat headerHeight = 35;
             }
         }
         DateItemButton *item = [self makeDateItemWithYear:firstDayComponents.year month:firstDayComponents.month day:i weekday:weekday];
-        //在今天之前的都设置为灰色
-        if (firstDayComponents.month == self.dateComponets.month) {
-            if (i < components.day) {
-                [item setTitleColor:RGBColor(190, 190, 190, 1.0) forState:UIControlStateNormal];
-                item.userInteractionEnabled = NO;
-            }else {
-                if (i == self.dateComponets.day){
+        /*
+         //在今天之前的都设置为灰色
+         if (firstDayComponents.month == self.dateComponets.month) {
+         if (i < components.day) {
+         [item setTitleColor:RGBColor(190, 190, 190, 1.0) forState:UIControlStateNormal];
+         item.userInteractionEnabled = NO;
+         }else {
+         if (i == self.dateComponets.day){
+         //是今天
+         [item configDateItemSelectType:DateItemSelectTypeToday];
+         }else{
+         [item setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+         }
+         
+         }
+         }else{
+         [item setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+         }
+         */
+        //
+        if (self.type == CustomCalendarViewTypeDefault) {
+            
+        }else{
+            //预览
+            [item setTitleColor:RGBColor(190, 190, 190, 1.0) forState:UIControlStateNormal];
+            item.userInteractionEnabled = NO;
+            if (firstDayComponents.month == self.dateComponets.month) {
+                if (i == components.day) {
                     //是今天
                     [item configDateItemSelectType:DateItemSelectTypeToday];
-                }else{
-                    [item setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
                 }
-                
             }
-        }else{
-            [item setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+            
+            NSDateComponents *tempComponents = [components copy];
+            [tempComponents setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:8 * 3600]];
+            tempComponents.day = i;
+            NSDate *date = [tempComponents.date copy];
+            NSDateFormatter *formatter = [[NSDateFormatter alloc]init];
+            [formatter setDateFormat:@"yyyy-MM-dd"];
+            NSString *dateStr = [formatter stringFromDate:date];
+            if ([self.planDatesArr containsObject:dateStr]) {
+                [item configDateItemSelectType:DateItemSelectTypePlan];
+            }
+            
         }
+        
+        
         [item configDateItemSelectType:DateItemSelectTypeChoose];
         [item addTarget:self action:@selector(dateItemButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
         [self.dateItemsArr addObject:item];
@@ -159,12 +199,26 @@ static CGFloat headerHeight = 35;
         firstDayComponents.day = 1;
         //计算当月有多少天
         NSInteger preDaysOfMonth = [firstDayComponents.calendar rangeOfUnit:NSCalendarUnitDay inUnit:NSCalendarUnitMonth forDate:firstDayComponents.date].length;
+        
         for (int i = (int)(firstDayOfWeekday - 1); i > 0; i--) {
             DateItemButton *item = [self makeDateItemWithYear:firstDayComponents.year month:firstDayComponents.month day:preDaysOfMonth weekday:i];
             [item setTitleColor:RGBColor(190, 190, 190, 1.0) forState:UIControlStateNormal];
             item.userInteractionEnabled = NO;
             [item configDateItemSelectType:DateItemSelectTypeChoose];
             [self.dateItemsArr insertObject:item atIndex:0];
+            if (self.type == CustomCalendarViewTypePreviewPlan) {
+                NSDateComponents *tempComponents = [components copy];
+                [tempComponents setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:8 * 3600]];
+                tempComponents.day = i;
+                NSDate *date = [tempComponents.date copy];
+                NSDateFormatter *formatter = [[NSDateFormatter alloc]init];
+                [formatter setDateFormat:@"yyyy-MM-dd"];
+                NSString *dateStr = [formatter stringFromDate:date];
+                if ([self.planDatesArr containsObject:dateStr]) {
+                    [item configDateItemSelectType:DateItemSelectTypePlan];
+                }
+                
+            }
             preDaysOfMonth--;
         }
     }
@@ -173,6 +227,7 @@ static CGFloat headerHeight = 35;
     //生成下月的时间item
     if (lastDayOfWeekday != 7) {
         //只有当最后一天不是周六时才生成下个月的
+        firstDayComponents.year = components.year;
         firstDayComponents.month = components.month + 1;
         if (firstDayComponents.month > 12) {
             //月份置一，年份加一
@@ -185,9 +240,23 @@ static CGFloat headerHeight = 35;
             [item setTitleColor:RGBColor(190, 190, 190, 1.0) forState:UIControlStateNormal];
             item.userInteractionEnabled = NO;
             [self.dateItemsArr addObject:item];
+            if (self.type == CustomCalendarViewTypePreviewPlan) {
+                NSDateComponents *tempComponents = [components copy];
+                [tempComponents setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:8 * 3600]];
+                tempComponents.day = i;
+                NSDate *date = [tempComponents.date copy];
+                NSDateFormatter *formatter = [[NSDateFormatter alloc]init];
+                [formatter setDateFormat:@"yyyy-MM-dd"];
+                NSString *dateStr = [formatter stringFromDate:date];
+                if ([self.planDatesArr containsObject:dateStr]) {
+                    [item configDateItemSelectType:DateItemSelectTypePlan];
+                }
+            }
             day++;
         }
     }
+    
+    [self configDateItemWithStartComponents:self.canChooseStartComponents endComponents:self.canChooseEdnComponents];
     
     
 }
@@ -226,10 +295,103 @@ static CGFloat headerHeight = 35;
             }else{
                 [item configDateItemSelectType:DateItemSelectTypeChoose];
             }
-
+            
             [self addSubview:item];
         }
     }
+    //重新计算self的高度
+    CGRect frame = self.frame;
+    frame.size.height = ((DateItemButton*)[self.dateItemsArr lastObject]).maxY + 10;
+    self.frame = frame;
+    
+}
+
+- (void)configPlanedItem
+{
+    if (self.type == CustomCalendarViewTypePreviewPlan) {
+        for (DateItemButton *item in self.dateItemsArr) {
+            NSString *dateStr = [item getDateStr];
+            if ([self.planDatesArr containsObject:dateStr]) {
+                [item configDateItemSelectType:DateItemSelectTypePlan];
+            }else{
+                [item configDateItemSelectType:DateItemSelectTypeNone];
+            }
+        }
+    }
+}
+
+- (void)configDateItemWithStartComponents:(NSDateComponents *)startComponents endComponents:(NSDateComponents *)endComponents
+{
+    self.canChooseStartComponents = startComponents;
+    self.canChooseEdnComponents = endComponents;
+    if (self.type == CustomCalendarViewTypeDefault && startComponents && endComponents) {
+        
+        for (DateItemButton *item in self.dateItemsArr) {
+            //不是今年当月
+            if (item.year == self.currentComponents.year && item.month == self.currentComponents.month) {
+                if (item.year >= startComponents.year && item.month <= endComponents.year) {
+                    //当月是否有时间在时间范围之内
+                    //需要点亮的都是在本月的时间，如果不是本月的，即使在时间范围内，仍是灰色的
+                    //有两种情况1、结束时间和开始时间在同一月2、结束时间和开始时间不在同一月、
+                    if (startComponents.month == endComponents.month && startComponents.month == item.month) {
+                        if (item.day >= startComponents.day && item.day <= endComponents.day) {
+                            //在可选的天的范围内，可点
+                            [item setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+                            item.userInteractionEnabled = YES;
+                        }else{
+                            //不是在可选的天的范围内，都不可点
+                            [item setTitleColor:RGBColor(190, 190, 190, 1.0) forState:UIControlStateNormal];
+                            item.userInteractionEnabled = NO;
+                        }
+                    }else if ((startComponents.month < endComponents.month || startComponents.year < endComponents.year) && (item.month == startComponents.month || item.month == endComponents.month)){
+                        if (item.month == startComponents.month) {
+                            if (item.day >= startComponents.day) {
+                                //在可选的天的范围内，可点
+                                [item setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+                                item.userInteractionEnabled = YES;
+                            }else{
+                                //不是在可选的天的范围内，都不可点
+                                [item setTitleColor:RGBColor(190, 190, 190, 1.0) forState:UIControlStateNormal];
+                                item.userInteractionEnabled = NO;
+                            }
+                        }else if (item.month == endComponents.month){
+                            if (item.day <= endComponents.day) {
+                                //在可选的天的范围内，可点
+                                [item setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+                                item.userInteractionEnabled = YES;
+                            }else{
+                                //不是在可选的天的范围内，都不可点
+                                [item setTitleColor:RGBColor(190, 190, 190, 1.0) forState:UIControlStateNormal];
+                                item.userInteractionEnabled = NO;
+                            }
+                        }
+                    }else{
+                        //不是在可选的天的范围内，都不可点
+                        [item setTitleColor:RGBColor(190, 190, 190, 1.0) forState:UIControlStateNormal];
+                        item.userInteractionEnabled = NO;
+                    }
+                }else{
+                    //不是在可选的年的范围内，都不可点
+                    [item setTitleColor:RGBColor(190, 190, 190, 1.0) forState:UIControlStateNormal];
+                    item.userInteractionEnabled = NO;
+                }
+                
+                
+            }else{
+                //不是当月的都不可点
+                [item setTitleColor:RGBColor(190, 190, 190, 1.0) forState:UIControlStateNormal];
+                item.userInteractionEnabled = NO;
+            }
+            
+            if (item.year == self.dateComponets.year && item.month == self.dateComponets.month && item.day == self.dateComponets.day) {
+                //今天
+                [item configDateItemSelectType:DateItemSelectTypeChoose];
+                [item configDateItemSelectType:DateItemSelectTypeToday];
+            }
+        }
+        
+    }
+    
     
 }
 
@@ -240,6 +402,7 @@ static CGFloat headerHeight = 35;
     NSDateComponents *preDateComponents = [self.currentComponents copy];
     preDateComponents.month = self.currentComponents.month - 1 < 1?12:self.currentComponents.month - 1;
     preDateComponents.year = self.currentComponents.month - 1 < 1?self.currentComponents.year - 1:self.currentComponents.year;
+    preDateComponents.day = 1;
     self.currentComponents = preDateComponents;
     for (DateItemButton *item in self.dateItemsArr) {
         [item removeFromSuperview];
@@ -248,6 +411,7 @@ static CGFloat headerHeight = 35;
     [self rebuildDateItemAndAdd];
     
     [self updateDateTitle:preDateComponents];
+    [self configPlanedItem];
     self.preSelectedItem = nil;
 }
 
@@ -257,6 +421,7 @@ static CGFloat headerHeight = 35;
     NSDateComponents *nexDateComponents = [self.currentComponents copy];
     nexDateComponents.month = self.currentComponents.month + 1 > 12?1:self.currentComponents.month + 1;
     nexDateComponents.year = self.currentComponents.month + 1 > 12?self.currentComponents.year + 1:self.currentComponents.year;
+    nexDateComponents.day = 1;
     self.currentComponents = nexDateComponents;
     for (DateItemButton *item in self.dateItemsArr) {
         [item removeFromSuperview];
@@ -265,6 +430,7 @@ static CGFloat headerHeight = 35;
     [self rebuildDateItemAndAdd];
     
     [self updateDateTitle:nexDateComponents];
+    [self configPlanedItem];
     
     self.preSelectedItem = nil;
 }
@@ -279,6 +445,17 @@ static CGFloat headerHeight = 35;
         self.preSelectedItem.selected = NO;
         self.preSelectedItem = item;
     }
+    if ([self.delegate respondsToSelector:@selector(customCalendarView:didSelectedDate:)]) {
+        [self.delegate customCalendarView:self didSelectedDate:[item getDateStr]];
+    }
+}
+
+#pragma mark - setter
+
+- (void)setPlanDatesArr:(NSArray *)planDatesArr
+{
+    _planDatesArr = [planDatesArr copy];
+    [self configPlanedItem];
 }
 
 #pragma mark - getter
@@ -309,14 +486,14 @@ static CGFloat headerHeight = 35;
         //添加切换的按钮
         UIButton *leftButton = [UIButton buttonWithType:UIButtonTypeCustom];
         [leftButton setFrame:CGRectMake(10, 0, 35, CGRectGetHeight(_headerView.frame))];
-        leftButton.backgroundColor = [UIColor redColor];
+        [leftButton setImage:[UIImage imageNamed:@"arrow_left"] forState:UIControlStateNormal];
         [leftButton addTarget:self action:@selector(previewMonthButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
         [_headerView addSubview:leftButton];
         
         //添加切换的按钮
         UIButton *rightButton = [UIButton buttonWithType:UIButtonTypeCustom];
         [rightButton setFrame:CGRectMake(CGRectGetWidth(_headerView.frame) - 10 - 35, 0, 35, CGRectGetHeight(_headerView.frame))];
-        rightButton.backgroundColor = [UIColor orangeColor];
+        [rightButton setImage:[UIImage imageNamed:@"arrow_right"] forState:UIControlStateNormal];
         [rightButton addTarget:self action:@selector(nextMonthButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
         [_headerView addSubview:rightButton];
     }

@@ -9,12 +9,30 @@
 #import <UIKit/UIKit.h>
 
 typedef NS_ENUM(NSUInteger, CustomCalendarViewType) {
-    CustomCalendarViewTypeDefault,
+    CustomCalendarViewTypeDefault = 1,
     CustomCalendarViewTypePreviewPlan,
 };
 
+@protocol  CustomCalendarViewDelegate;
+
 @interface CustomCalendarView : UIView
 
+@property (weak, nonatomic) id<CustomCalendarViewDelegate>delegate;
+
+@property (copy, nonatomic) NSArray *planDatesArr;
+
+
+
 - (instancetype)initWithFrame:(CGRect)frame type:(CustomCalendarViewType)type;
+
+- (void)configDateItemWithStartComponents:(NSDateComponents*)startComponents endComponents:(NSDateComponents*)endComponents;
+
+@end
+
+@protocol  CustomCalendarViewDelegate<NSObject>
+
+@optional
+
+- (void)customCalendarView:(CustomCalendarView*)calendarView didSelectedDate:(NSString*)dateStr;
 
 @end

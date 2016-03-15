@@ -35,4 +35,6 @@ typedef NS_ENUM(NSUInteger, DateItemSelectType){
 
 - (void)configDateItemSelectType:(DateItemSelectType)type;
 
+- (NSString*)getDateStr;
+
 @end
